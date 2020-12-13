@@ -65,7 +65,10 @@ tunnelingClientP cfg@TunnelSettings{..} app conn = onError $ do
   debug "Oppening Websocket stream"
 
   stream <- connectionToStream conn
-  ret <- WS.runClientWithStream stream serverHost (toPath cfg) WS.defaultConnectionOptions [] run
+  let headers = if not (null upgradeCredentials) then [("Authorization", "Basic " <> B64.encode upgradeCredentials)] else []
+  let hostname = if not (null hostHeader) then (BC.unpack hostHeader) else serverHost
+
+  ret <- WS.runClientWithStream stream hostname (toPath cfg) WS.defaultConnectionOptions headers run
 
   debug "Closing Websocket stream"
   return ret
@@ -74,7 +77,7 @@ tunnelingClientP cfg@TunnelSettings{..} app conn = onError $ do
     connectionToStream Connection{..} =  WS.makeStream read (write . toStrict . fromJust)
     onError = flip catch (\(e :: SomeException) -> return . throwError . WebsocketError $ show e)
     run cnx = do
-      WS.forkPingThread cnx 30
+      WS.forkPingThread cnx websocketPingFrequencySec
       app (toConnection cnx)
 
 
@@ -98,7 +101,7 @@ tlsClientP TunnelSettings{..} app conn = onError $ do
                                        , NC.settingDisableSession = False
                                        , NC.settingUseServerName = False
                                        }
-    connectionParams = NC.ConnectionParams { NC.connectionHostname = serverHost
+    connectionParams = NC.ConnectionParams { NC.connectionHostname = if tlsSNI == mempty then serverHost else BC.unpack tlsSNI
                                            , NC.connectionPort = serverPort
                                            , NC.connectionUseSecure = Just tlsSettings
                                            , NC.connectionUseSocks = Nothing

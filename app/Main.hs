@@ -31,6 +31,10 @@ data WsTunnel = WsTunnel
   , verbose         :: Bool
   , quiet           :: Bool
   , pathPrefix      :: String
+  , hostHeader      :: String
+  , tlsSNI          :: String
+  , websocketPingFrequencySec :: Int
+  , wsTunnelCredentials :: String
   } deriving (Show, Data, Typeable)
 
 data WsServerInfo = WsServerInfo
@@ -61,10 +65,20 @@ cmdLine = WsTunnel
   , pathPrefix     = def &= explicit &= name "upgradePathPrefix"
                          &= help "Use a specific prefix that will show up in the http path in the upgrade request. Useful if you need to route requests server side but don't have vhosts"
                          &= typ "String" &= groupname "Client options"
+  , wsTunnelCredentials
+                   = def &= explicit &= name "upgradeCredentials"
+                         &= help "Credentials for the Basic HTTP authorization type sent with the upgrade request."
+                         &= typ "USER[:PASS]"
   , proxy          = def &= explicit &= name "p" &= name "httpProxy"
                          &= help "If set, will use this proxy to connect to the server" &= typ "USER:PASS@HOST:PORT"
+  , hostHeader     = def &= explicit &= name "hostHeader" &= groupname "Client options"
+                         &= help "If set, add the custom string as host http header" &= typ "String" &= groupname "Client options"
+  , tlsSNI         = def &= explicit &= name "tlsSNI" &= groupname "Client options"
+                         &= help "If set, use custom string in the SNI during TLS handshake" &= typ "String" &= groupname "Client options"
   , soMark         = def &= explicit &= name "soMark"
                          &= help "(linux only) Mark network packet with SO_MARK sockoption with the specified value. You need to use {root, sudo, capabilities} to run wstunnel when using this option" &= typ "int"
+  , websocketPingFrequencySec = def &= explicit &= name "websocketPingFrequencySec"
+                         &= help "do a hearthbeat ping every x seconds to maintain websocket connection" &= typ "int"
   , wsTunnelServer = def &= argPos 0 &= typ "ws[s]://wstunnelServer[:port]"
 
   , serverMode     = def &= explicit &= name "server"
@@ -168,6 +182,9 @@ main = do
                  , Main.udpTimeout = if Main.udpTimeout cfg' == 0 then 30 * 10^(6 :: Int)
                                      else if Main.udpTimeout cfg' == -1 then -1
                                      else Main.udpTimeout cfg' * 10^(6:: Int)
+                 , Main.websocketPingFrequencySec = if Main.websocketPingFrequencySec cfg' == 0
+                                                    then 30
+                                                    else Main.websocketPingFrequencySec cfg'
                  }
 
   let serverInfo = parseServerInfo (WsServerInfo False "" 0) (wsTunnelServer cfg)
@@ -220,7 +237,11 @@ runApp cfg serverInfo
           , proxySetting = parseProxyInfo (proxy cfg)
           , useSocks = False
           , upgradePrefix = pathPrefix cfg
+          , upgradeCredentials = BC.pack $ wsTunnelCredentials cfg
           , udpTimeout = Main.udpTimeout cfg
+          , tlsSNI = BC.pack $ Main.tlsSNI cfg
+          , hostHeader = BC.pack $ Main.hostHeader cfg
+          , websocketPingFrequencySec = Main.websocketPingFrequencySec cfg
       }
 
     toTcpLocalToRemoteTunnelSetting cfg serverInfo (TunnelInfo lHost lPort rHost rPort)  =
@@ -236,7 +257,11 @@ runApp cfg serverInfo
           , proxySetting = parseProxyInfo (proxy cfg)
           , useSocks = False
           , upgradePrefix = pathPrefix cfg
+          , upgradeCredentials = BC.pack $ wsTunnelCredentials cfg
           , udpTimeout = Main.udpTimeout cfg
+          , tlsSNI = BC.pack $ Main.tlsSNI cfg
+          , hostHeader = BC.pack $ Main.hostHeader cfg
+          , websocketPingFrequencySec = Main.websocketPingFrequencySec cfg
       }
 
     toUdpLocalToRemoteTunnelSetting cfg serverInfo (TunnelInfo lHost lPort rHost rPort) =
@@ -252,7 +277,11 @@ runApp cfg serverInfo
           , proxySetting = parseProxyInfo (proxy cfg)
           , useSocks = False
           , upgradePrefix = pathPrefix cfg
+          , upgradeCredentials = BC.pack $ wsTunnelCredentials cfg
           , udpTimeout = Main.udpTimeout cfg
+          , tlsSNI = BC.pack $ Main.tlsSNI cfg
+          , hostHeader = BC.pack $ Main.hostHeader cfg
+          , websocketPingFrequencySec = Main.websocketPingFrequencySec cfg
       }
 
     toDynamicTunnelSetting cfg serverInfo (TunnelInfo lHost lPort _ _) =
@@ -268,5 +297,9 @@ runApp cfg serverInfo
           , proxySetting = parseProxyInfo (proxy cfg)
           , useSocks = True
           , upgradePrefix = pathPrefix cfg
+          , upgradeCredentials = BC.pack $ wsTunnelCredentials cfg
           , udpTimeout = Main.udpTimeout cfg
+          , tlsSNI = BC.pack $ Main.tlsSNI cfg
+          , hostHeader = BC.pack $ Main.hostHeader cfg
+          , websocketPingFrequencySec = Main.websocketPingFrequencySec cfg
       }

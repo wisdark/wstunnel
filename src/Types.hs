@@ -77,7 +77,12 @@ data TunnelSettings = TunnelSettings
   , useTls        :: Bool
   , useSocks      :: Bool
   , upgradePrefix :: String
+  , upgradeCredentials
+                  :: ByteString
+  , tlsSNI        :: ByteString
+  , hostHeader    :: ByteString
   , udpTimeout    :: Int
+  , websocketPingFrequencySec :: Int
   }
 
 instance Show TunnelSettings where
